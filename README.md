@@ -136,7 +136,7 @@ RAG Data Flow
 ## Project Structure
 
 ```
-rag-microservices/
+naive_rag_aws/
 ├── .github/
 │   └── workflows/
 │       └── deploy.yml          # CI/CD pipeline
@@ -169,8 +169,8 @@ rag-microservices/
 ### 1. Clone the repo
 
 ```bash
-git clone https://github.com/YOUR_ORG/rag-microservices.git
-cd rag-microservices
+git clone https://github.com/YOUR_ORG/naive_rag_aws.git
+cd naive_rag_aws
 ```
 
 ### 2. (Optional) Customise environment
@@ -219,7 +219,7 @@ aws ec2 run-instances \
   --key-name YOUR_KEY_PAIR \
   --security-group-ids sg-XXXXXXXX \
   --block-device-mappings '[{"DeviceName":"/dev/sda1","Ebs":{"VolumeSize":50,"VolumeType":"gp3"}}]' \
-  --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=rag-microservices}]'
+  --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=naive_rag_aws}]'
 ```
 
 ### Step 2 – Run the provisioning script
@@ -230,14 +230,14 @@ scp -i ~/.ssh/YOUR_KEY.pem scripts/provision_ec2.sh ubuntu@<EC2_PUBLIC_IP>:~
 
 # SSH in and run
 ssh -i ~/.ssh/YOUR_KEY.pem ubuntu@<EC2_PUBLIC_IP>
-sudo REPO_URL=https://github.com/YOUR_ORG/rag-microservices.git \
+sudo REPO_URL=https://github.com/YOUR_ORG/naive_rag_aws.git \
      BRANCH=main \
      bash provision_ec2.sh
 ```
 
 The script will:
 1. Install Docker Engine & Docker Compose v2
-2. Clone the repository to `/opt/rag-microservices`
+2. Clone the repository to `/opt/naive_rag_aws`
 3. Configure UFW firewall
 4. Install and configure the AWS CloudWatch Logs agent
 5. Register a systemd service (`rag-stack`) that auto-starts on boot
@@ -247,10 +247,10 @@ The script will:
 
 ```bash
 # Check services
-docker compose -f /opt/rag-microservices/docker-compose.yml ps
+docker compose -f /opt/naive_rag_aws/docker-compose.yml ps
 
 # Tail logs
-docker compose -f /opt/rag-microservices/docker-compose.yml logs -f
+docker compose -f /opt/naive_rag_aws/docker-compose.yml logs -f
 
 # API health
 curl http://<EC2_PUBLIC_IP>/health
@@ -409,8 +409,8 @@ docker compose logs -f qdrant
 
 Logs are forwarded to CloudWatch under:
 
-- `/rag-microservices/docker` – container stdout/stderr
-- `/rag-microservices/provision` – provisioning script output
+- `/naive_rag_aws/docker` – container stdout/stderr
+- `/naive_rag_aws/provision` – provisioning script output
 
 View in the AWS Console under **CloudWatch → Log groups**.
 
