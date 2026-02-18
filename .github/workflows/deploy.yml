@@ -1,24 +1,14 @@
 name: Deploy RAG Microservices
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Trigger: every push to main
-# ─────────────────────────────────────────────────────────────────────────────
 on:
   push:
     branches: [main]
-  workflow_dispatch:   # allow manual trigger from the GitHub UI
-
-env:
-  REGISTRY: ghcr.io
-  IMAGE_BACKEND:  ghcr.io/${{ github.repository_owner }}/rag-backend
-  IMAGE_FRONTEND: ghcr.io/${{ github.repository_owner }}/rag-frontend
+  workflow_dispatch:
 
 jobs:
-  # ───────────────────────────────────────────────────────────────────────────
-  # Job 1 – Lint & Test
-  # ───────────────────────────────────────────────────────────────────────────
+  # ── Job 1: Lint & Test ──────────────────────────────────────────────────────
   test:
-    name: Lint & Unit Tests
+    name: Lint & Test
     runs-on: ubuntu-latest
 
     steps:
@@ -32,20 +22,13 @@ jobs:
           cache: pip
           cache-dependency-path: backend/requirements.txt
 
-      - name: Install linting tools
+      - name: Install ruff
         run: pip install ruff==0.6.9
 
       - name: Lint backend
         run: ruff check backend/ --select E,W,F --ignore E501
 
-      - name: Install backend deps (for import checks)
-        working-directory: backend
-        run: |
-          pip install --quiet \
-            fastapi pydantic qdrant-client sentence-transformers \
-            transformers torch pymupdf python-multipart
-
-      - name: Check imports / syntax
+      - name: Syntax check
         run: |
           python - <<'PYEOF'
           import ast, pathlib
@@ -56,160 +39,55 @@ jobs:
           print('Syntax OK')
           PYEOF
 
-  # ───────────────────────────────────────────────────────────────────────────
-  # Job 2 – Build & Push Docker Images to GHCR
-  # ───────────────────────────────────────────────────────────────────────────
-  build-and-push:
-    name: Build & Push Images
-    needs: test
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-
-    outputs:
-      backend_tag:  ${{ steps.meta-backend.outputs.tags }}
-      frontend_tag: ${{ steps.meta-frontend.outputs.tags }}
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up QEMU (multi-arch builds)
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      # ── Backend image metadata ──────────────────────────────────────────────
-      - name: Docker metadata – Backend
-        id: meta-backend
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.IMAGE_BACKEND }}
-          tags: |
-            type=sha,prefix=sha-,format=short
-            type=raw,value=latest,enable={{is_default_branch}}
-
-      # ── Frontend image metadata ─────────────────────────────────────────────
-      - name: Docker metadata – Frontend
-        id: meta-frontend
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.IMAGE_FRONTEND }}
-          tags: |
-            type=sha,prefix=sha-,format=short
-            type=raw,value=latest,enable={{is_default_branch}}
-
-      # ── Build & push Backend ────────────────────────────────────────────────
-      - name: Build & Push Backend image
-        uses: docker/build-push-action@v6
-        with:
-          context: ./backend
-          file: ./backend/Dockerfile
-          push: true
-          tags: ${{ steps.meta-backend.outputs.tags }}
-          labels: ${{ steps.meta-backend.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      # ── Build & push Frontend ───────────────────────────────────────────────
-      - name: Build & Push Frontend image
-        uses: docker/build-push-action@v6
-        with:
-          context: ./frontend
-          file: ./frontend/Dockerfile
-          push: true
-          tags: ${{ steps.meta-frontend.outputs.tags }}
-          labels: ${{ steps.meta-frontend.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-  # ───────────────────────────────────────────────────────────────────────────
-  # Job 3 – Deploy to EC2
-  # ───────────────────────────────────────────────────────────────────────────
+  # ── Job 2: Deploy to EC2 ────────────────────────────────────────────────────
   deploy:
     name: Deploy to EC2
-    needs: build-and-push
+    needs: test
     runs-on: ubuntu-latest
-    environment: production   # optional: requires manual approval in GitHub
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Install SSH key
-        uses: shimataro/ssh-key-action@v2
+      - name: SSH into EC2 and deploy
+        uses: appleboy/ssh-action@v1.0.3
         with:
+          host: ${{ secrets.EC2_PUBLIC_IP }}
+          username: ubuntu
           key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
-          known_hosts: ${{ secrets.EC2_KNOWN_HOSTS }}
-          # Generate known_hosts with:
-          #   ssh-keyscan -H <EC2_PUBLIC_IP> >> ~/.ssh/known_hosts
-          #   cat ~/.ssh/known_hosts   → paste into secret EC2_KNOWN_HOSTS
-
-      - name: Copy updated compose & nginx configs to EC2
-        run: |
-          scp -o StrictHostKeyChecking=no \
-            docker-compose.yml \
-            nginx/nginx.conf \
-            ubuntu@${{ secrets.EC2_PUBLIC_IP }}:/opt/rag-microservices/
-
-          scp -o StrictHostKeyChecking=no -r \
-            nginx/ \
-            ubuntu@${{ secrets.EC2_PUBLIC_IP }}:/opt/rag-microservices/
-
-      - name: SSH – Pull images & restart stack
-        run: |
-          ssh ubuntu@${{ secrets.EC2_PUBLIC_IP }} << 'REMOTE'
+          command_timeout: 30m
+          script: |
             set -e
             cd /opt/rag-microservices
 
-            echo "Logging in to GHCR…"
-            echo "${{ secrets.GITHUB_TOKEN }}" | \
-              docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            echo ">>> Pulling latest code from GitHub..."
+            git fetch origin main
+            git reset --hard origin/main
 
-            echo "Pulling latest images…"
-            docker compose pull backend frontend
+            echo ">>> Building and restarting containers..."
+            docker compose up -d --build --remove-orphans
 
-            echo "Restarting services with zero-downtime…"
-            docker compose up -d --remove-orphans --no-build
-
-            echo "Pruning dangling images…"
+            echo ">>> Pruning old images..."
             docker image prune -f
 
-            echo "Current service status:"
+            echo ">>> Container status:"
             docker compose ps
 
-            echo "Deployment complete ✓"
-          REMOTE
+            echo ">>> Deployment complete!"
 
       - name: Health check
         run: |
-          echo "Waiting 30 s for services to come up…"
+          echo "Waiting 30s for services..."
           sleep 30
           STATUS=$(curl -sf -o /dev/null -w "%{http_code}" \
             http://${{ secrets.EC2_PUBLIC_IP }}/health || echo "000")
-          echo "Health check HTTP status: $STATUS"
-          [[ "$STATUS" == "200" ]] || \
-            { echo "Health check failed!"; exit 1; }
+          echo "Health check status: $STATUS"
+          [[ "$STATUS" == "200" ]] || { echo "Health check failed!"; exit 1; }
 
-      - name: Notify on success
+      - name: Notify success
         if: success()
         run: |
-          echo "✅ Deployment succeeded!"
-          echo "   Commit  : ${{ github.sha }}"
-          echo "   Deployed: $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
-          echo "   URL     : http://${{ secrets.EC2_PUBLIC_IP }}/"
+          echo "Deployment succeeded!"
+          echo "Commit  : ${{ github.sha }}"
+          echo "URL     : http://${{ secrets.EC2_PUBLIC_IP }}/"
 
-      - name: Notify on failure
+      - name: Notify failure
         if: failure()
-        run: |
-          echo "❌ Deployment FAILED for commit ${{ github.sha }}"
-          # Add Slack / PagerDuty / email webhook here if desired
+        run: echo "Deployment FAILED for commit ${{ github.sha }}"
