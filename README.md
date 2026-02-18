@@ -427,8 +427,29 @@ View in the AWS Console under **CloudWatch → Log groups**.
 | Out of memory | Use `t3.xlarge` (16 GB) or reduce `MAX_NEW_TOKENS` |
 | SSH deploy fails | Regenerate `EC2_KNOWN_HOSTS` after stopping/starting instance (IP changes) |
 
+
+If you get, any awscli error you can directly run:
+```
+curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip
+unzip -q /tmp/awscliv2.zip -d /tmp
+sudo /tmp/aws/install
+rm -rf /tmp/awscliv2.zip /tmp/aws
+aws --version
+
+docker --version || curl -fsSL https://get.docker.com | sudo sh
+
+sudo git clone https://github.com/lft-bhandari/naive_rag_aws /opt/rag-microservices
+cd /opt/rag-microservices
+sudo docker compose up -d
+
+sudo docker compose logs -f backend
+```
 ---
 
 ## License
 
 MIT – see [LICENSE](LICENSE) for details.
+
+
+## Streamlit UI URL:
+http://54.87.199.55/
