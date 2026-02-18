@@ -46,9 +46,15 @@ jobs:
             transformers torch pymupdf python-multipart
 
       - name: Check imports / syntax
-        run: python -c "import ast, sys, pathlib; \
-          [ast.parse(p.read_text()) for p in pathlib.Path('backend').glob('**/*.py')]; \
-          print('Syntax OK')"
+        run: |
+          python - <<'PYEOF'
+          import ast, pathlib
+          files = list(pathlib.Path('backend').glob('**/*.py'))
+          for p in files:
+              ast.parse(p.read_text())
+              print(f'OK: {p}')
+          print('Syntax OK')
+          PYEOF
 
   # ───────────────────────────────────────────────────────────────────────────
   # Job 2 – Build & Push Docker Images to GHCR
