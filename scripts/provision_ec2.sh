@@ -51,11 +51,19 @@ apt-get upgrade -y -qq
 apt-get install -y -qq \
     curl wget git unzip jq \
     ca-certificates gnupg lsb-release \
-    htop tmux tree net-tools \
-    awscli
+    htop tmux tree net-tools
 
-apt-get install -y python3-pip
-pip3 install awscli --break-system-packages
+# Install AWS CLI v2 (awscli apt package dropped in Ubuntu 24.04)
+if ! command -v aws &>/dev/null; then
+    info "Installing AWS CLI v2..."
+    curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip
+    unzip -q /tmp/awscliv2.zip -d /tmp
+    /tmp/aws/install
+    rm -rf /tmp/awscliv2.zip /tmp/aws
+    info "AWS CLI installed: $(aws --version)"
+else
+    info "AWS CLI already installed: $(aws --version)"
+fi
 
 # ── 2. Docker Engine ───────────────────────────────────────────────────────────
 if ! command -v docker &>/dev/null; then
