@@ -1,0 +1,132 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# RAG Microservices – Docker Compose
+#
+# Services:
+#   qdrant   – vector database (persists data in a named volume)
+#   backend  – FastAPI RAG API  (port 8000)
+#   frontend – Streamlit UI     (port 8501)
+#   nginx    – reverse proxy    (port 80 → backend / frontend)
+# ─────────────────────────────────────────────────────────────────────────────
+
+networks:
+  rag-net:
+    driver: bridge
+
+volumes:
+  qdrant-data:
+  model-cache:
+
+services:
+
+  # ── Qdrant Vector DB ─────────────────────────────────────────────────────────
+  qdrant:
+    image: qdrant/qdrant:v1.11.0
+    container_name: qdrant
+    restart: unless-stopped
+    networks: [rag-net]
+    volumes:
+      - qdrant-data:/qdrant/storage
+    ports:
+      - "6333:6333"   # REST API
+      - "6334:6334"   # gRPC
+    environment:
+      QDRANT__SERVICE__GRPC_PORT: "6334"
+      QDRANT__LOG_LEVEL: INFO
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/6333"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # ── FastAPI Backend ───────────────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: rag-backend:latest
+    container_name: rag-backend
+    restart: unless-stopped
+    networks: [rag-net]
+    ports:
+      - "8000:8000"
+    depends_on:
+      qdrant:
+        condition: service_healthy
+    volumes:
+      - model-cache:/root/.cache          # HuggingFace model cache
+    environment:
+      QDRANT_HOST: qdrant
+      QDRANT_PORT: "6333"
+      QDRANT_COLLECTION: rag_documents
+      EMBED_MODEL: BAAI/bge-small-en-v1.5
+      LLM_MODEL: Qwen/Qwen2.5-0.5B-Instruct
+      CHUNK_SIZE: "512"
+      CHUNK_OVERLAP: "64"
+      TOP_K: "5"
+      MAX_NEW_TOKENS: "512"
+      # Logging
+      LOG_LEVEL: INFO
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 600s  # models take time to load
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  # ── Streamlit Frontend ────────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: rag-frontend:latest
+    container_name: rag-frontend
+    restart: unless-stopped
+    networks: [rag-net]
+    ports:
+      - "8501:8501"
+    depends_on:
+      backend:
+        condition: service_started
+    environment:
+      API_BASE_URL: http://backend:8000
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8501/_stcore/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+  # ── Nginx Reverse Proxy ───────────────────────────────────────────────────────
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: rag-nginx
+    restart: unless-stopped
+    networks: [rag-net]
+    ports:
+      - "80:80"
+    depends_on:
+      - frontend
+      - backend
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "nginx -t && curl -sf http://localhost/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
