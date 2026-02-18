@@ -13,7 +13,7 @@
 set -euo pipefail
 
 # ── Defaults ──────────────────────────────────────────────────────────────────
-REPO_URL="${REPO_URL:-https://github.com/YOUR_ORG/rag-microservices.git}"
+REPO_URL="${REPO_URL:-https://github.com/lft-bhandari/naive_rag_aws}"
 BRANCH="${BRANCH:-main}"
 APP_DIR="/opt/rag-microservices"
 COMPOSE_VERSION="v2.29.7"
@@ -53,6 +53,9 @@ apt-get install -y -qq \
     ca-certificates gnupg lsb-release \
     htop tmux tree net-tools \
     awscli
+
+apt-get install -y python3-pip
+pip3 install awscli --break-system-packages
 
 # ── 2. Docker Engine ───────────────────────────────────────────────────────────
 if ! command -v docker &>/dev/null; then
