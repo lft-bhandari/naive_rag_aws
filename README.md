@@ -453,3 +453,7 @@ MIT – see [LICENSE](LICENSE) for details.
 
 ## Streamlit UI URL:
 http://54.87.199.55/
+
+Demo Questions:
+1. Who wrote Person in Wifi Paper?
+2. # trigger
