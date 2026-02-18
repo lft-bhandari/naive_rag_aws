@@ -16,7 +16,7 @@ from pydantic import BaseModel
 
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
-    Distance, VectorParams, PointStruct, Filter, FieldCondition, MatchValue
+    Distance, VectorParams, PointStruct
 )
 
 from sentence_transformers import SentenceTransformer
@@ -285,3 +285,4 @@ async def reset_collection():
     _qdrant.delete_collection(COLLECTION_NAME)
     _ensure_collection()
     return {"message": f"Collection '{COLLECTION_NAME}' reset successfully."}
+
