@@ -35,7 +35,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 # ── Must be root ───────────────────────────────────────────────────────────────
-[[ $EUID -eq 0 ]] || error "Run this script as root (sudo ./provision_ec2.sh)"
+[[ $EUID -eq 0 ]] || error "Run this script as root user (sudo ./provision_ec2.sh)"
 
 info "=== RAG Microservices EC2 Provisioning ==="
 info "Repo:   $REPO_URL"

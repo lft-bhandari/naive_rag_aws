@@ -2,7 +2,6 @@
 RAG Microservice Backend - FastAPI Application
 Handles document indexing and AI-powered chat with context retrieval.
 """
-
 import os
 import uuid
 import logging
@@ -253,7 +252,6 @@ async def index_document(file: UploadFile = File(...)):
         document_id=doc_id,
     )
 
-
 @app.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
     """
@@ -277,7 +275,6 @@ async def chat(request: ChatRequest):
 
     logger.info("Answer generated (len=%d chars)", len(answer))
     return ChatResponse(answer=answer, sources=sources)
-
 
 @app.delete("/collection")
 async def reset_collection():
